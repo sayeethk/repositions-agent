@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+
+# Input files
+input/*.xlsm
+input/*.xlsx
+input/*.xls
+input/*.csv
+
+# Mac
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
