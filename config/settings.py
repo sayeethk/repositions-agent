@@ -1,4 +1,4 @@
-EXCEL_PATH = "C:/Users/H525267/Projects/repositions-agent/input/Simplified IMS Template - Maricopa.xlsm"
+EXCEL_PATH = "./input/Simplified IMS Template.xlsm"
 DEPENDENCIES_PATH = "./config/milestone_dependencies.json"
 
 # ISC Agent Configuration

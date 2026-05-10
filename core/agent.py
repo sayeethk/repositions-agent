@@ -234,3 +234,97 @@ class RepositionsAgent:
         self._log_event("SESSION_END", {"project": project.part_number})
         # Recalculate after conversation
         project.calculate_priority()
+
+    # ------------------------------------------------------------------ #
+    #  Copilot Actions
+    # ------------------------------------------------------------------ #
+
+    def get_portfolio_summary(self) -> Dict[str, int]:
+        """
+        Calculates a summary of the portfolio by grouping projects by their
+        current active milestone (the first incomplete milestone).
+        """
+        summary = {}
+        for proj in self.projects.values():
+            sorted_milestones = sorted(
+                proj.milestones.values(),
+                key=lambda m: m.baseline or datetime.datetime.max
+            )
+            
+            current_milestone = "Not Started"
+            for m in sorted_milestones:
+                if m.status != Status.COMPLETE:
+                    current_milestone = m.name
+                    break
+            else:
+                if sorted_milestones:
+                    current_milestone = "All Complete"
+                else:
+                    current_milestone = "No Milestones"
+                    
+            summary[current_milestone] = summary.get(current_milestone, 0) + 1
+            
+        return summary
+
+    def apply_copilot_updates(self, updates: List[Dict]):
+        """
+        Applies a list of parsed copilot intents to the portfolio.
+        """
+        from data.models import parse_date, Status
+        
+        for update in updates:
+            action = update["action"]
+            parts = update["part_numbers"]
+            ms_name = update["milestone"]
+            date_str = update["date"]
+            reason = update["reason"]
+            
+            for part in parts:
+                proj = self.projects.get(part)
+                if not proj:
+                    continue
+                    
+                if action == "COMPLETE_MILESTONE" and ms_name:
+                    if ms_name in proj.milestones:
+                        ms = proj.milestones[ms_name]
+                        ms.status = Status.COMPLETE
+                        ms.is_overdue = False
+                        if date_str:
+                            parsed = parse_date(date_str)
+                            # If date parses, use it. Else use today.
+                            ms.actual = parsed if parsed else datetime.datetime.now()
+                        else:
+                            ms.actual = datetime.datetime.now()
+                        self._log_event("COPILOT_COMPLETE", {"part": part, "milestone": ms_name})
+                        
+                elif action == "DELAY_MILESTONE":
+                    # If milestone is provided, delay that specific one. Otherwise delay the project active milestone.
+                    if ms_name and ms_name in proj.milestones:
+                        ms = proj.milestones[ms_name]
+                        ms.status = Status.DELAYED
+                        ms.blocker_reason = reason
+                        self._log_event("COPILOT_DELAY", {"part": part, "milestone": ms_name, "reason": reason})
+                    else:
+                        sorted_milestones = sorted(
+                            proj.milestones.values(),
+                            key=lambda m: m.baseline or datetime.datetime.max
+                        )
+                        for m in sorted_milestones:
+                            if m.status != Status.COMPLETE:
+                                m.status = Status.DELAYED
+                                m.blocker_reason = reason
+                                self._log_event("COPILOT_DELAY", {"part": part, "milestone": m.name, "reason": reason})
+                                break
+                                
+                elif action == "REVERT_MILESTONE" and ms_name:
+                    if ms_name in proj.milestones:
+                        ms = proj.milestones[ms_name]
+                        ms.status = Status.AT_RISK
+                        ms.actual = None
+                        ms.is_overdue = False
+                        if reason:
+                            ms.blocker_reason = reason
+                        self._log_event("COPILOT_REVERT", {"part": part, "milestone": ms_name})
+                        
+                # Recalculate project priority after updates
+                proj.calculate_priority()

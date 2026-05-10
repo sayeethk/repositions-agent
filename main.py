@@ -12,6 +12,7 @@ import datetime
 from data.excel_loader import ExcelLoader
 from data.models import Project, Status
 from core.agent import RepositionsAgent
+from services.copilot_session import CopilotSession
 from utils.helpers import (
     format_date,
     format_currency,
@@ -54,11 +55,16 @@ def main():
     agent.load_projects(projects_dict)
 
     # Enrich with ISC Agent data (line-down dates + revenue impact)
-    print("\n[ISC] Enriching projects with ISC Agent data...")
-    print("  This will launch Chrome to query the ISC Agent.")
-    print("  Please ensure you are logged into Chrome first.\n")
-    input("  Press Enter to launch Chrome...")
-    enriched_count = agent.enrich_with_isc()
+    skip_isc = "--skip-isc" in sys.argv
+    enriched_count = 0
+    if not skip_isc:
+        print("\n[ISC] Enriching projects with ISC Agent data...")
+        print("  This will launch Chrome to query the ISC Agent.")
+        print("  Please ensure you are logged into Chrome first.\n")
+        input("  Press Enter to launch Chrome...")
+        enriched_count = agent.enrich_with_isc()
+    else:
+        print("\n[ISC] Skipping ISC enrichment as requested.")
     print()
 
     # Pre-calculate all priorities (now with real ISC data)
@@ -96,6 +102,10 @@ def main():
 
         if user_input == 'save':
             _handle_save(agent)
+            continue
+
+        if user_input == 'copilot':
+            _handle_copilot(agent)
             continue
 
         if user_input.startswith('select '):
@@ -162,6 +172,7 @@ def _show_help():
     print_boxed_header("AVAILABLE COMMANDS")
     print("  select [number]  - Drill into a project from the dashboard")
     print("  update [part]    - Report status on a specific part number")
+    print("  copilot          - Open the Weekly IMS Auto-Update Copilot")
     print("  status           - Show full project registry")
     print("  save             - Save updates to Excel tracker")
     print("  help             - Show this help menu")
@@ -189,6 +200,12 @@ def _handle_save(agent: RepositionsAgent):
         print("[OK] Updates saved to Excel tracker.")
     else:
         print("[ERROR] Failed to save. Check file permissions and path.")
+
+
+def _handle_copilot(agent: RepositionsAgent):
+    """Run the Weekly IMS Auto-Update Copilot session."""
+    session = CopilotSession(agent)
+    session.run()
 
 
 def _handle_select(agent: RepositionsAgent, user_input: str):
